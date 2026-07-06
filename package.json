@@ -19,8 +19,8 @@
 		"dotenv": "^17.4.2",
 		"lodash": "^4.18.1",
 		"next": "16.2.10",
-		"react": "19.2.6",
-		"react-dom": "19.2.6",
+		"react": "19.2.7",
+		"react-dom": "19.2.7",
 		"react-icons": "^5.7.0"
 	},
 	"devDependencies": {
