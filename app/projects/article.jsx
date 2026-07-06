@@ -1,0 +1,201 @@
+import Link from "next/link";
+import { FaGithub, FaRobot } from "react-icons/fa";
+import { GoDependabot, GoEye, GoEyeClosed, GoStar } from "react-icons/go";
+import { SiClaude, SiGithubcopilot } from "react-icons/si";
+import { VercelInfo } from "../components/vercel-info";
+
+export const Article = ({ project }) => {
+	const appLink = project.homepage ? project.homepage : project.html_url;
+	const { ownerMetrics } = project;
+	const viewsData = ownerMetrics?.views;
+	const alertsData = ownerMetrics?.openAlertsBySeverity;
+	const copilotPRCount = ownerMetrics?.copilotPRCount;
+	const codexCount = ownerMetrics?.codexCount;
+	const claudeCount = ownerMetrics?.claudeCount;
+
+	/** Repository visitors info. */
+	let views = (
+		<span
+			title="Can't get traffic data for someone else's repo."
+			className="flex items-center gap-1"
+		>
+			<GoEyeClosed className="w-4 h-4" />
+		</span>
+	);
+	let alerts = (
+		<span title="Can't get alerts data for someone else's repo.">
+			<GoDependabot className="w-4 h-4" />
+		</span>
+	);
+	let copilotPRs = (
+		<span title="Can't get Copilot data for someone else's repo.">
+			<SiGithubcopilot className="w-3.5 h-3.5 text-[#8534F3]" />
+		</span>
+	);
+	let codexContributions = (
+		<span title="Can't get Codex data for someone else's repo.">
+			<FaRobot className="w-3.5 h-3.5 text-cyan-300" />
+		</span>
+	);
+	let claudeContributions = (
+		<span title="Can't get Claude data for someone else's repo.">
+			<SiClaude className="w-3.5 h-3.5 text-orange-300" />
+		</span>
+	);
+	if (viewsData) {
+		const { todayUniques = 0, sumUniques = 0 } = viewsData;
+		views = (
+			<span
+				title="Unique repository visitors: Last 14 days / Yesterday (GitHub API has 24-hour delay)."
+				className="flex items-center gap-1"
+			>
+				<GoEye className="w-4 h-4" />{" "}
+				{Intl.NumberFormat("en-US", { notation: "compact" }).format(sumUniques)}
+				/
+				{Intl.NumberFormat("en-US", { notation: "compact" }).format(
+					todayUniques,
+				)}
+			</span>
+		);
+	}
+
+	if (alertsData) {
+		const alertColor =
+			alertsData.critical > 0
+				? "red"
+				: alertsData.high > 0
+					? "orange"
+					: alertsData.medium > 0
+						? "yellow"
+						: alertsData.low > 0
+							? "blue"
+							: "gray";
+		const alertCountTotal =
+			(alertsData.critical || 0) +
+			(alertsData.high || 0) +
+			(alertsData.medium || 0) +
+			(alertsData.low || 0);
+		const alertTitle =
+			alertCountTotal > 0
+				? `Open Dependabot alerts: ${JSON.stringify(alertsData)}`
+				: "No open Dependabot alerts.";
+
+		alerts = (
+			<span title={alertTitle} className="flex items-center gap-1">
+				<GoDependabot className="w-4 h-4 danger" fill={alertColor} />{" "}
+				{Intl.NumberFormat("en-US", { notation: "compact" }).format(
+					alertCountTotal,
+				)}
+			</span>
+		);
+	}
+
+	if (copilotPRCount !== null && copilotPRCount !== undefined) {
+		copilotPRs = (
+			<Link
+				href={`https://github.com/${project.owner.login}/${project.name}/pulls?q=is%3Amerged+author%3A%40Copilot+`}
+				title={`Copilot PRs merged: ${copilotPRCount}`}
+				className="flex items-center gap-1 hover:text-blue-500"
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				<SiGithubcopilot className="w-3.5 h-3.5 text-[#8534F3]" />{" "}
+				{Intl.NumberFormat("en-US", { notation: "compact" }).format(
+					copilotPRCount,
+				)}
+			</Link>
+		);
+	}
+
+	if (codexCount !== null && codexCount !== undefined) {
+		codexContributions = (
+			<Link
+				href={`https://github.com/${project.owner.login}/${project.name}/pulls?q=is%3Apr+is%3Amerged+label%3Acodex`}
+				title={`Codex contributions: ${codexCount} (labeled PRs + co-authored commits; link shows labeled PRs)`}
+				className="flex items-center gap-1 hover:text-blue-500"
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				<FaRobot className="w-3.5 h-3.5 text-cyan-300" />{" "}
+				{Intl.NumberFormat("en-US", { notation: "compact" }).format(codexCount)}
+			</Link>
+		);
+	}
+
+	if (claudeCount !== null && claudeCount !== undefined) {
+		claudeContributions = (
+			<Link
+				href={`https://github.com/${project.owner.login}/${project.name}/pulls?q=is%3Apr+is%3Amerged+label%3Aclaude`}
+				title={`Claude contributions: ${claudeCount} (labeled PRs)`}
+				className="flex items-center gap-1 hover:text-blue-500"
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				<SiClaude className="w-3.5 h-3.5 text-orange-300" />{" "}
+				{Intl.NumberFormat("en-US", { notation: "compact" }).format(
+					claudeCount,
+				)}
+			</Link>
+		);
+	}
+
+	return (
+		<article className="p-4 md:p-8">
+			<div className="flex justify-between gap-2 items-center">
+				<span className="text-xs duration-1000 text-zinc-200 group-hover:text-white group-hover:border-zinc-200 drop-shadow-orange">
+					<time
+						dateTime={new Date(project.created_at).toISOString()}
+						title="Created"
+					>
+						{new Date(project.created_at).toISOString().substring(0, 10)}
+					</time>
+				</span>
+				<span className="text-zinc-500 text-xs flex items-center gap-1 ">
+					{/* <Eye className="w-4 h-4" />{" "}
+                    {Intl.NumberFormat("en-US", { notation: "compact" }).format(project.watchers_count)} */}
+					{project.vercel && (
+						<VercelInfo info={{ ...project.vercel, owner: project.owner }} />
+					)}
+					<span title="Total stars." className="flex items-center gap-1">
+						{/* <StarIcon className="w-4 h-4" />{" "} */}
+						<GoStar className="w-4 h-4" />{" "}
+						{Intl.NumberFormat("en-US", { notation: "compact" }).format(
+							project.stargazers_count,
+						)}
+					</span>
+				</span>
+			</div>
+
+			<Link href={appLink}>
+				<h2
+					className="z-20 text-xl font-medium duration-1000 lg:text-3xl text-zinc-200 group-hover:text-white font-display cursor-pointer"
+					title={`Click to view the ${project.homepage ? "app" : "repo"}.`}
+				>
+					<span className="bg-linear-to-r from-purple-400 to-blue-500 hover:from-pink-500 hover:to-yellow-500 text-transparent bg-clip-text">
+						{project.name}
+					</span>
+				</h2>
+			</Link>
+			<div className="z-20 mt-4 text-sm duration-1000 text-zinc-400 group-hover:text-zinc-200">
+				{project.description}
+			</div>
+			<div className="flex justify-between gap-2 items-center float-left mt-2 border-t-2 border-gray-700 border-opacity-50">
+				<span className="text-zinc-500 text-xs flex items-center gap-1">
+					{views} {alerts} {copilotPRs} {codexContributions}{" "}
+					{claudeContributions}
+				</span>
+			</div>
+			<div className="flex justify-between gap-2 items-center float-right mt-2 border-t-2 border-gray-700 border-opacity-50">
+				<span
+					className="text-zinc-500 text-xs align-middle flex items-center gap-1"
+					title="GitHub repository link."
+				>
+					<FaGithub className="w-4 h-4" />
+					<Link href={project.html_url} className="hover:text-blue-800">
+						{project.name}
+					</Link>
+				</span>
+			</div>
+		</article>
+	);
+};

@@ -1,0 +1,36 @@
+{
+	"name": "portfolio",
+	"version": "1.5.0",
+	"private": false,
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build",
+		"build-only": "next build",
+		"start": "next start",
+		"format": "npx @biomejs/biome format --write",
+		"lint": "npx @biomejs/biome lint --write",
+		"check": "npx @biomejs/biome check --write"
+	},
+	"engines": {
+		"node": "24.x"
+	},
+	"dependencies": {
+		"@tailwindcss/postcss": "^4.3.2",
+		"dotenv": "^17.4.2",
+		"lodash": "^4.18.1",
+		"next": "16.2.10",
+		"react": "19.2.6",
+		"react-dom": "19.2.6",
+		"react-icons": "^5.7.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.2",
+		"@tailwindcss/line-clamp": "^0.4.4",
+		"postcss": "^8.5.16",
+		"postcss-nesting": "^14.0.0",
+		"tailwindcss": "^4.3.1"
+	},
+	"allowScripts": {
+		"sharp@0.34.5": true
+	}
+}
