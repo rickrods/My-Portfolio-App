@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
 export async function GET(_request, { params }) {
-	const { username } = await params;
+	const { username } = params;
 
 	const token =
-		username === data.githubUsername
+		username === process.env.GITHUB_USERNAME
 			? process.env.GH_TOKEN
 			: process.env.SECONDARY_GH_TOKEN;
 

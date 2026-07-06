@@ -56,11 +56,12 @@ const _TryYourself = ({ customUsername }) => {
 
 const LandingComponent = async ({ searchParams: { customUsername } }) => {
 	const username = customUsername || data.githubUsername;
-	const primaryUserPromise = getUser(username);
+	const primaryUser = await getUser(username);
+	const primaryUserPromise = Promise.resolve(primaryUser);
 
 	let secondaryUserPromise;
 	if (!customUsername && data.secondaryGithubUsername) {
-		secondaryUserPromise = getUser(data.secondaryGithubUsername);
+		secondaryUserPromise = getUser(data.secondaryGithubUsername); // This will now run after the primary user fetch completes
 	}
 
 	return (
@@ -87,6 +88,7 @@ const LandingComponent = async ({ searchParams: { customUsername } }) => {
 				</h2>
 				{secondaryUserPromise && (
 					<>
+						<div className="hidden w-screen h-px animate-glow md:block animate-fade-in bg-linear-to-r from-zinc-300/0 via-zinc-300/50 to-zinc-300/0" />
 						<h1 className="flex items-center z-10 text-4xl hover:scale-110 text-transparent duration-1000 cursor-default text-edge-outline animate-title font-display sm:text-6xl md:text-9xl whitespace-nowrap bg-clip-text bg-white p-5">
 							{data.secondaryGithubUsername}
 							<Suspense fallback={<p>Loading...</p>}>
