@@ -1,16 +1,7 @@
 {
-	"description": "One of my github accounts, I have multiple",
-	"githubUsername": "rickrods",
-	"avatarUrl": "https://avatars.githubusercontent.com/u/64104643?v=4&size=64",
-	"displayName": "Rickrods",
-	"email": "rickrods@proton.me",
+	"description": "Primary Github account",
 	"projects": {
-		"blacklist": [
-			"chain-crypto-com-tools",
-			"MINA-BP",
-			"Ubuntu-Scripts",
-			"POKT-block-check"
-		],
+		"blacklist": ["chain-crypto-com-tools", "MINA-BP", "Ubuntu-Scripts"],
 		"heroNames": [
 			"My-Portfolio-App",
 			"arweave-record-the-bch-blockch",
@@ -20,11 +11,7 @@
 			"docs"
 		]
 	},
-	"secondaryDescription": "My Second github account",
-	"secondaryGithubUsername": "imstaked",
-	"secondaryAvatarUrl": "https://avatars.githubusercontent.com/u/82274336?v=4&size=64",
-	"secondaryDisplayName": "ImStaked",
-	"secondaryEmail": "imstaked@proton.me",
+	"secondaryDescription": "Secondary Github account",
 	"secondaryProjects": {
 		"blacklist": [
 			"Unbelievable-Story-Blog",

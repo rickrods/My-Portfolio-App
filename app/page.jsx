@@ -5,7 +5,7 @@ import data from "../data.json";
 import { Navigation } from "./components/nav";
 import { ProfileOrganizations } from "./components/orgs";
 import { CopilotActivity, RecentActivity } from "./components/recent-activity";
-import { getUser } from "./data";
+import { getPrimaryUser, getSecondaryUser, getUser } from "./data";
 
 export default async function Home(props) {
 	const searchParams = await props.searchParams;
@@ -21,20 +21,20 @@ const UserIcon = async ({ promise }) => {
 			alt="👨‍💻"
 			width={100}
 			height={100}
-			src={user.avatar_url || data.avatarUrl}
+			src={user.avatar_url || "/favicon.ico"}
 			className="float-right rounded-full mx-4"
 		/>
 	);
 };
 
-const UserText = async ({ promise }) => {
+const UserText = async ({ promise, fallbackName, description }) => {
 	const user = await promise;
 
 	return (
 		<p>
-			Hi, my name is {user.name || data.displayName}
+			Hi, my name is {user.name || user.login || fallbackName || "Developer"}
 			{". "}
-			{user.bio}
+			{description || user.bio}
 		</p>
 	);
 };
@@ -55,13 +55,25 @@ const _TryYourself = ({ customUsername }) => {
 };
 
 const LandingComponent = async ({ searchParams: { customUsername } }) => {
-	const username = customUsername || data.githubUsername;
-	const primaryUser = await getUser(username);
-	const primaryUserPromise = Promise.resolve(primaryUser);
+	const primaryUser = customUsername
+		? await getUser(customUsername)
+		: await getPrimaryUser();
+	const username =
+		customUsername ||
+		primaryUser?.login ||
+		process.env.GITHUB_USERNAME ||
+		"testuser";
+	const primaryUserPromise = Promise.resolve(primaryUser ?? {});
 
 	let secondaryUserPromise;
-	if (!customUsername && data.secondaryGithubUsername) {
-		secondaryUserPromise = getUser(data.secondaryGithubUsername); // This will now run after the primary user fetch completes
+	let secondaryUsername = "";
+	if (!customUsername) {
+		const secondaryUser = await getSecondaryUser();
+		secondaryUsername =
+			secondaryUser?.login || process.env.SECONDARY_GITHUB_USERNAME || "";
+		if (secondaryUsername) {
+			secondaryUserPromise = Promise.resolve(secondaryUser ?? {});
+		}
 	}
 
 	return (
@@ -82,7 +94,11 @@ const LandingComponent = async ({ searchParams: { customUsername } }) => {
 					<Suspense
 						fallback={<div className="w-full h-px min-h-8">Loading...</div>}
 					>
-						<UserText promise={primaryUserPromise} />
+						<UserText
+							promise={primaryUserPromise}
+							fallbackName={username}
+							description={data.description}
+						/>
 						<ProfileOrganizations username={username} />
 						<RecentActivity username={username} />
 						<CopilotActivity username={username} />
@@ -91,11 +107,9 @@ const LandingComponent = async ({ searchParams: { customUsername } }) => {
 				{secondaryUserPromise && (
 					<>
 						<div className="hidden w-screen h-px animate-glow md:block animate-fade-in bg-linear-to-r from-zinc-300/0 via-zinc-300/50 to-zinc-300/0" />
-						<Link
-							href={`/projects?customUsername=${data.secondaryGithubUsername}`}
-						>
+						<Link href={`/projects?customUsername=${secondaryUsername}`}>
 							<h1 className="flex items-center z-10 text-4xl hover:scale-110 text-transparent duration-1000 cursor-default text-edge-outline animate-title font-display sm:text-6xl md:text-9xl whitespace-nowrap bg-clip-text bg-white p-5">
-								{data.secondaryGithubUsername}
+								{secondaryUsername}
 								<Suspense fallback={<p>Loading...</p>}>
 									<UserIcon promise={secondaryUserPromise} />
 								</Suspense>
@@ -105,8 +119,14 @@ const LandingComponent = async ({ searchParams: { customUsername } }) => {
 							<Suspense
 								fallback={<div className="w-full h-px min-h-8">Loading...</div>}
 							>
-								<UserText promise={secondaryUserPromise} />
-								<ProfileOrganizations username={data.secondaryGithubUsername} />
+								<UserText
+									promise={secondaryUserPromise}
+									fallbackName={secondaryUsername}
+									description={data.secondaryDescription}
+								/>
+								<ProfileOrganizations username={secondaryUsername} />
+								<RecentActivity username={secondaryUsername} />
+								<CopilotActivity username={secondaryUsername} />
 							</Suspense>
 						</h2>
 					</>

@@ -14,7 +14,9 @@ A personal portfolio website built with the latest versions of [Next.js](https:/
 
 
 ## ⭐ Features
-- Displays your GitHub profile, organizations, and repositories
+- Displays your GitHub profile, organizations, and repositories for one or two linked accounts
+- Resolves the active GitHub usernames from personal access tokens in [.env.local](.env.local), so sensitive profile values are no longer stored in public config
+- Supports a secondary account with its own description, featured repositories, and hidden repositories
 - Shows project stats, traffic data, and security alerts when available
 - Includes Vercel deployment information and framework detection
 - Supports a simple search experience for browsing other GitHub users
@@ -34,30 +36,39 @@ Add your tokens to [.env.local](.env.local):
 # Required for build-time GitHub data requests
 GH_TOKEN=YOUR_GH_TOKEN
 
+# Optional, enables a secondary GitHub profile and repository set
+SECONDARY_GH_TOKEN=YOUR_SECONDARY_GH_TOKEN
+
 # Optional for Vercel deployment information
 VC_TOKEN=YOUR_VERCEL_TOKEN
 ```
 
-`GH_TOKEN` is required for the app to build and run successfully.
+`GH_TOKEN` is required for the app to build and run successfully. `SECONDARY_GH_TOKEN` is optional and enables the secondary account experience.
 
-#### 📝 Configure the app
-Configure github settings for the application in [data.json](data.json) 
-- The `projects` section allows you to feature certain repositories and hide others from your portfolio.
-- Use `heroNames` to list repositories you want to feature, and `blacklist` to list repositories you want to hide.
+#### 📝 Configuration
+- The app retrieves the GitHub usernames, avatars, display names, and bio from the github api using the configured github personal access token environment variables.
+- The app will retrieve the bio from the github account and use this if `description` and `secondaryDescription` are null. If `description` and `secondaryDescription` are filled in the application will use this data instead of the github bio.
+- Use `projects` and `secondaryProjects` to feature certain repositories and hide others from the portfolio.
 
 ```json
 {
-	"description": "Description of the project github account or organization",
-	"githubUsername": "github-username",
-	"avatarUrl": "Right click on your github avatar and copy url to retrieve",
-	"displayName": "Name to be displayed in the portfolio",
-	"email": "Email address to display in the portfolio",
-	"projects": {
-		"blacklist": ["repo-to-hide-1", "repo-to-hide-2"],
-		"heroNames": ["featured-repo-1", "featured-repo-2"]
-	}
+  "description": "Description for the primary GitHub account",
+  "projects": {
+    "blacklist": ["repo-to-hide-1", "repo-to-hide-2"],
+    "heroNames": ["featured-repo-1", "featured-repo-2"]
+  },
+  "secondaryDescription": "Description for the secondary GitHub account",
+  "secondaryProjects": {
+    "blacklist": ["secondary-repo-to-hide-1"],
+    "heroNames": ["secondary-featured-repo-1"]
+  }
 }
 ```
+
+#### Contact Form
+Secured by Cloudflare Turnstile
+Use the Site key to integrate the client-side rendering widget on your website and the Secret key to validate responses on your server
+.
 
 #### ▶️ Run the app
 Then install dependencies and start the development server:

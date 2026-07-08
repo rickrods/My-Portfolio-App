@@ -1,8 +1,7 @@
 import { Suspense } from "react";
-import data from "../../data.json";
 import { Card } from "../components/card";
 import { Navigation } from "../components/nav";
-import { getProjectsPageData } from "../data";
+import { getPrimaryUser, getProjectsPageData, getSecondaryUser } from "../data";
 import { Article } from "./article";
 
 const ProjectCard = ({ project }) => (
@@ -26,6 +25,12 @@ const ProjectsList = async ({ username }) => {
 
 export default async function ProjectsPage({ searchParams }) {
 	const { customUsername } = await searchParams;
+	const primaryUser = await getPrimaryUser();
+	const secondaryUser = await getSecondaryUser();
+	const primaryUsername =
+		primaryUser?.login || process.env.GITHUB_USERNAME || "testuser";
+	const secondaryUsername =
+		secondaryUser?.login || process.env.SECONDARY_GITHUB_USERNAME || "testuser";
 
 	return (
 		<div className="relative pb-16">
@@ -52,15 +57,15 @@ export default async function ProjectsPage({ searchParams }) {
 						<>
 							<div className="space-y-8">
 								<h3 className="text-2xl font-bold tracking-tight text-zinc-100 sm:text-3xl">
-									{data.githubUsername}
+									{primaryUsername}
 								</h3>
-								<ProjectsList username={data.githubUsername} />
+								<ProjectsList username={primaryUsername} />
 							</div>
 							<div className="w-full h-px bg-zinc-800 mt-16" />
 							<h3 className="text-2xl font-bold tracking-tight text-zinc-100 sm:text-3xl">
-								{data.secondaryGithubUsername}
+								{secondaryUsername}
 							</h3>
-							<ProjectsList username={data.secondaryGithubUsername} />
+							<ProjectsList username={secondaryUsername} />
 						</>
 					)}
 				</Suspense>

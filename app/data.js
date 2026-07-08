@@ -1,5 +1,6 @@
 // Using unstable_cache for data fetching functions to improve performance.
 // These wrappers provide automatic caching with configurable revalidation times.
+
 import { unstable_cache } from "next/cache";
 import data from "../data.json";
 
@@ -10,15 +11,6 @@ const HOURS_12 = 60 * 60 * 12;
 const HOURS_24 = 60 * 60 * 24;
 const GITHUB_API_URL = "https://api.github.com";
 const GITHUB_GRAPHQL_URL = `${GITHUB_API_URL}/graphql`;
-const COPILOT_GRAPHQL_BATCH_SIZE = 20;
-const CODEX_GRAPHQL_BATCH_SIZE = 10;
-const CLAUDE_GRAPHQL_BATCH_SIZE = 10;
-const PORTFOLIO_OWNER_USERNAME =
-	process.env.GITHUB_USERNAME || data.githubUsername;
-const ownedUsernames = [
-	PORTFOLIO_OWNER_USERNAME,
-	data.secondaryGithubUsername,
-].filter(Boolean);
 
 function cloneFallbackValue(fallback) {
 	if (
@@ -38,10 +30,13 @@ function getGitHubHeaders(username, extraHeaders = {}) {
 		...extraHeaders,
 	};
 
-	const isSecondary =
+	const secondaryUsername =
+		process.env.SECONDARY_GITHUB_USERNAME?.toLowerCase();
+	const isSecondary = Boolean(
 		username &&
-		data.secondaryGithubUsername &&
-		username.toLowerCase() === data.secondaryGithubUsername.toLowerCase();
+			secondaryUsername &&
+			username.toLowerCase() === secondaryUsername,
+	);
 
 	const token = isSecondary
 		? process.env.SECONDARY_GH_TOKEN
@@ -168,6 +163,7 @@ async function fetchPaginatedGitHubArray(initialUrl, { context, next } = {}) {
 		const response = await fetchGitHubResponse(url.toString(), {
 			context: `${context} (page ${page})`,
 			fallback: [],
+			headers: { owner: new URL(initialUrl).pathname.split("/")[2] },
 			next,
 		});
 
@@ -193,19 +189,6 @@ async function fetchPaginatedGitHubArray(initialUrl, { context, next } = {}) {
 	return items;
 }
 
-function getRepositoryKey(project) {
-	return project.full_name ?? `${project.owner?.login}/${project.name}`;
-}
-
-function isOwnedRepository(project) {
-	return Boolean(
-		project.owner?.login &&
-			ownedUsernames.some(
-				(name) => name.toLowerCase() === project.owner.login.toLowerCase(),
-			),
-	);
-}
-
 function createEmptyVercelDetails(nextjsLatestRelease = {}) {
 	return {
 		nextjsLatestRelease,
@@ -228,6 +211,94 @@ function chunkItems(items, size) {
 	}
 
 	return chunks;
+}
+
+export const getPrimaryUser = unstable_cache(
+	async () => {
+		try {
+			const response = await fetch(`${GITHUB_API_URL}/user`, {
+				headers: {
+					Authorization: `token ${process.env.GH_TOKEN}`,
+					Accept: "application/vnd.github+json",
+				},
+				next: {
+					tags: ["github", "github-user", "primary-user"],
+				},
+			});
+
+			if (!response.ok) {
+				console.error(
+					"GitHub user lookup failed for the primary account",
+					response.status,
+					response.statusText,
+				);
+				return null;
+			}
+
+			return response.json();
+		} catch (error) {
+			console.error("Failed to resolve the primary GitHub user:", error);
+			return null;
+		}
+	},
+	["getPrimaryUser"],
+	{ revalidate: HOURS_24 },
+);
+
+export const getSecondaryUser = unstable_cache(
+	async () => {
+		try {
+			const response = await fetch(`${GITHUB_API_URL}/user`, {
+				headers: {
+					Authorization: `token ${process.env.SECONDARY_GH_TOKEN}`,
+					Accept: "application/vnd.github+json",
+				},
+				next: {
+					tags: ["github", "github-user", "secondary-user"],
+				},
+			});
+
+			if (!response.ok) {
+				console.error(
+					"GitHub user lookup failed for the secondary account",
+					response.status,
+					response.statusText,
+				);
+				return null;
+			}
+
+			return response.json();
+		} catch (error) {
+			console.error("Failed to resolve the secondary GitHub user:", error);
+			return null;
+		}
+	},
+	["getSecondaryUser"],
+	{ revalidate: HOURS_24 },
+);
+
+const COPILOT_GRAPHQL_BATCH_SIZE = 20;
+const CODEX_GRAPHQL_BATCH_SIZE = 10;
+const CLAUDE_GRAPHQL_BATCH_SIZE = 10;
+
+async function getOwnedUsernames() {
+	const primaryUser = await getPrimaryUser();
+	const secondaryUser = await getSecondaryUser();
+	return [primaryUser?.login, secondaryUser?.login].filter(Boolean);
+}
+
+function getRepositoryKey(project) {
+	return project.full_name ?? `${project.owner?.login}/${project.name}`;
+}
+
+async function isOwnedRepository(project) {
+	const usernames = await getOwnedUsernames();
+	return Boolean(
+		project.owner?.login &&
+			usernames.some(
+				(name) => name.toLowerCase() === project.owner.login.toLowerCase(),
+			),
+	);
 }
 
 function buildCopilotRepoSearchQuery(username, reponame) {
@@ -333,34 +404,33 @@ function buildClaudeLabeledPRRepoSearchQuery(username, reponame) {
 // TODO: Implement option to switch between info for authenticated user and other users.
 export const getUser = unstable_cache(
 	async (username) => {
-		const timerLabel = `getUser:${username}`;
-		console.time(timerLabel);
+		let userToFetch = username;
+		if (!userToFetch) {
+			const primaryUser = await getPrimaryUser();
+			userToFetch = primaryUser?.login;
+		}
+		if (!userToFetch) return {};
 		const response = await fetchGitHubJson(
-			`${GITHUB_API_URL}/users/${username}`,
+			`${GITHUB_API_URL}/users/${userToFetch}`,
 			{
-				context: `user data for ${username}`,
+				context: `user data for ${userToFetch}`,
 				fallback: {},
 			},
 		);
-		console.timeEnd(timerLabel);
 		return response;
 	},
-	(username) => ["getUser", username],
+	(username) => ["getUser", username || "primary"],
 	{ revalidate },
 );
 
 export const getRepos = unstable_cache(
 	async (username) => {
-		const timerLabel = `getRepos:${username}`;
-		console.log("Fetching repos for", username);
-		console.time(timerLabel);
 		const response = await fetchPaginatedGitHubArray(
 			`${GITHUB_API_URL}/users/${username}/repos?per_page=100`,
 			{
 				context: `repositories for ${username}`,
 			},
 		);
-		console.timeEnd(timerLabel);
 		return response;
 	},
 	(username) => ["getRepos", username],
@@ -369,8 +439,6 @@ export const getRepos = unstable_cache(
 
 export const getSocialAccounts = unstable_cache(
 	async (username) => {
-		console.log("Fetching social accounts for", username);
-		console.time("getSocialAccounts");
 		const response = await fetchGitHubJson(
 			`${GITHUB_API_URL}/users/${username}/social_accounts`,
 			{
@@ -378,7 +446,6 @@ export const getSocialAccounts = unstable_cache(
 				fallback: [],
 			},
 		);
-		console.timeEnd("getSocialAccounts");
 		return Array.isArray(response) ? response : [];
 	},
 	(username) => ["getSocialAccounts", username],
@@ -387,9 +454,6 @@ export const getSocialAccounts = unstable_cache(
 
 export const getPinnedRepos = unstable_cache(
 	async (username) => {
-		const timerLabel = `getPinnedRepos:${username}`;
-		console.log("Fetching pinned repos for", username);
-		console.time(timerLabel);
 		const pinned = await fetchGitHubGraphQL(
 			`
         query GetPinnedRepos($username: String!) {
@@ -410,7 +474,6 @@ export const getPinnedRepos = unstable_cache(
 				fallback: { user: { pinnedItems: { nodes: [] } } },
 			},
 		);
-		console.timeEnd(timerLabel);
 		return (
 			pinned.user?.pinnedItems?.nodes
 				?.map((node) => node?.name)
@@ -423,9 +486,12 @@ export const getPinnedRepos = unstable_cache(
 
 export const getUserOrganizations = unstable_cache(
 	async (username) => {
-		const timerLabel = `getUserOrganizations:${username}`;
-		console.log("Fetching organizations for", username);
-		console.time(timerLabel);
+		if (!username) {
+			const primaryUser = await getPrimaryUser();
+			username = primaryUser?.login;
+		}
+		if (!username) return { data: { user: { organizations: { nodes: [] } } } };
+
 		const orgs = await fetchGitHubGraphQL(
 			`
         query GetUserOrganizations($username: String!) {
@@ -448,7 +514,6 @@ export const getUserOrganizations = unstable_cache(
 				fallback: { user: { organizations: { nodes: [] } } },
 			},
 		);
-		console.timeEnd(timerLabel);
 		return { data: orgs };
 	},
 	(username) => ["getUserOrganizations", username],
@@ -461,9 +526,6 @@ export const getVercelProjects = unstable_cache(
 			console.log("No Vercel token found - no projects will be shown.");
 			return { projects: [] };
 		}
-		const timerLabel = `getVercelProjects:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-		console.log("Fetching Vercel projects");
-		console.time(timerLabel);
 
 		const baseUrl = "https://api.vercel.com/v9/projects";
 		const limit = 100;
@@ -494,12 +556,10 @@ export const getVercelProjects = unstable_cache(
 					return { projects: [] };
 				}
 
-				allProjects.push(...(data.projects ?? []));
+				allProjects.push(...(data.projects || []));
 				nextCursor = data.pagination?.next || null;
 				url = nextCursor ? `${baseUrl}?limit=${limit}&until=${nextCursor}` : "";
-			} while (nextCursor);
-
-			console.log("Vercel projects count:", allProjects.length);
+			} while (nextCursor); // Removed console.log("Vercel projects count:", allProjects.length);
 			return { projects: allProjects };
 		} catch (error) {
 			console.error("Vercel API fetch failed:", error);
@@ -697,15 +757,19 @@ export const getRepositoryPackageJson = unstable_cache(
 
 export const getRecentUserActivity = unstable_cache(
 	async (username) => {
-		console.log("Fetching recent activity for", username);
-		console.time("getRecentUserActivity");
+		if (!username) {
+			const primaryUser = await getPrimaryUser();
+			username = primaryUser?.login;
+		}
+		if (!username) return [];
+
+		const _timerLabel = `getRecentUserActivity:${username}`;
 		const response = await fetchPaginatedGitHubArray(
 			`${GITHUB_API_URL}/users/${username}/events?per_page=100`,
 			{
-				context: `recent activity for ${username}`,
+				context: `recent activity for ${username}`, // Keep context for error logging
 			},
 		);
-		console.timeEnd("getRecentUserActivity");
 		return response;
 	},
 	(username) => ["getRecentUserActivity", username],
@@ -1021,7 +1085,10 @@ async function getRepositoryVercelDetails(
 }
 
 async function enrichProjectsForCards(projects) {
-	const ownerProjects = projects.filter(isOwnedRepository);
+	const ownedUsernames = await getOwnedUsernames();
+	const ownerProjects = projects.filter((p) =>
+		isOwnedRepository(p, ownedUsernames),
+	);
 	const hasVercelProjects = projects.some((project) => project.vercel);
 	const [copilotPRCounts, codexCounts, claudeCounts, nextjsLatestRelease] =
 		await Promise.all([
@@ -1034,7 +1101,7 @@ async function enrichProjectsForCards(projects) {
 	return Promise.all(
 		projects.map(async (project) => {
 			const repoOwner = project.owner?.login;
-			const isOwnerRepo = isOwnedRepository(project);
+			const isOwnerRepo = await isOwnedRepository(project);
 			const [views, openAlertsBySeverity, vercelDetails] = await Promise.all([
 				isOwnerRepo && repoOwner
 					? getTrafficPageViews(repoOwner, project.name)
@@ -1081,9 +1148,19 @@ async function enrichProjectsForCards(projects) {
 
 export const getProjectsPageData = unstable_cache(
 	async (username) => {
+		let targetUsername = username;
+		if (!targetUsername) {
+			const primaryUser = await getPrimaryUser();
+			targetUsername = primaryUser?.login;
+		}
+
+		if (!targetUsername) {
+			return { heroes: [], sorted: [] };
+		}
+
 		const [repositories, pinnedNames, vercelProjects] = await Promise.all([
-			getRepos(username),
-			getPinnedRepos(username),
+			getRepos(targetUsername),
+			getPinnedRepos(targetUsername),
 			getVercelProjects(),
 		]);
 
@@ -1109,12 +1186,17 @@ export const getProjectsPageData = unstable_cache(
 			vercel: vercelProjectsByName.get(repo.name),
 		}));
 
-		const blacklist =
-			username &&
-			data.secondaryGithubUsername &&
-			username.toLowerCase() === data.secondaryGithubUsername.toLowerCase()
-				? data.secondaryProjects.blacklist
-				: data.projects.blacklist;
+		const secondaryUser = await getSecondaryUser();
+		const secondaryUsername = secondaryUser?.login;
+
+		const isSecondary =
+			targetUsername &&
+			secondaryUsername &&
+			targetUsername.toLowerCase() === secondaryUsername.toLowerCase();
+
+		const blacklist = isSecondary
+			? data.secondaryProjects.blacklist
+			: data.projects.blacklist;
 
 		const heroes = repositoriesWithVercel
 			.filter((project) => pinnedNames.includes(project.name))
@@ -1150,7 +1232,7 @@ export const getProjectsPageData = unstable_cache(
 			),
 		};
 	},
-	(username) => ["getProjectsPageData", username],
+	(username) => ["getProjectsPageData", username || "primary"],
 	{ revalidate: HOURS_1 },
 );
 
@@ -1216,8 +1298,11 @@ export const getCopilotPRs = unstable_cache(
  */
 export const getCopilotPRsAccountWide = unstable_cache(
 	async (username) => {
-		console.log(`Fetching account-wide Copilot PRs for ${username}`);
-		console.time("getCopilotPRsAccountWide");
+		if (!username) {
+			const primaryUser = await getPrimaryUser();
+			username = primaryUser?.login;
+		}
+		if (!username) return 0;
 
 		try {
 			const query = buildCopilotAccountSearchQuery(username);
@@ -1249,7 +1334,7 @@ export const getCopilotPRsAccountWide = unstable_cache(
 			);
 			return 0;
 		} finally {
-			console.timeEnd("getCopilotPRsAccountWide");
+			// Timer removed for cleanup
 		}
 	},
 	(username) => ["getCopilotPRsAccountWide", username],
@@ -1264,10 +1349,11 @@ export const getCopilotPRsAccountWide = unstable_cache(
  */
 export const getCodexCoauthoredCommitsAccountWide = unstable_cache(
 	async (username) => {
-		console.log(
-			`Fetching account-wide Codex co-authored commits for ${username}`,
-		);
-		console.time("getCodexCoauthoredCommitsAccountWide");
+		if (!username) {
+			const primaryUser = await getPrimaryUser();
+			username = primaryUser?.login;
+		}
+		if (!username) return 0;
 
 		try {
 			const query = buildCodexCoauthoredCommitSearchQuery(username);
@@ -1296,7 +1382,7 @@ export const getCodexCoauthoredCommitsAccountWide = unstable_cache(
 			);
 			return 0;
 		} finally {
-			console.timeEnd("getCodexCoauthoredCommitsAccountWide");
+			// Timer removed for cleanup
 		}
 	},
 	(username) => ["getCodexCoauthoredCommitsAccountWide", username],
@@ -1311,10 +1397,11 @@ export const getCodexCoauthoredCommitsAccountWide = unstable_cache(
  */
 export const getClaudeCoauthoredCommitsAccountWide = unstable_cache(
 	async (username) => {
-		console.log(
-			`Fetching account-wide Claude co-authored commits for ${username}`,
-		);
-		console.time("getClaudeCoauthoredCommitsAccountWide");
+		if (!username) {
+			const primaryUser = await getPrimaryUser();
+			username = primaryUser?.login;
+		}
+		if (!username) return 0;
 
 		try {
 			const query = buildClaudeCoauthoredCommitSearchQuery(username);
@@ -1343,7 +1430,7 @@ export const getClaudeCoauthoredCommitsAccountWide = unstable_cache(
 			);
 			return 0;
 		} finally {
-			console.timeEnd("getClaudeCoauthoredCommitsAccountWide");
+			// Timer removed for cleanup
 		}
 	},
 	(username) => ["getClaudeCoauthoredCommitsAccountWide", username],
@@ -1358,8 +1445,11 @@ export const getClaudeCoauthoredCommitsAccountWide = unstable_cache(
  */
 export const getCodexLabeledPRsAccountWide = unstable_cache(
 	async (username) => {
-		console.log(`Fetching account-wide codex-labeled PRs for ${username}`);
-		console.time("getCodexLabeledPRsAccountWide");
+		if (!username) {
+			const primaryUser = await getPrimaryUser();
+			username = primaryUser?.login;
+		}
+		if (!username) return 0;
 
 		try {
 			const query = buildCodexLabeledAccountSearchQuery(username);
@@ -1391,7 +1481,7 @@ export const getCodexLabeledPRsAccountWide = unstable_cache(
 			);
 			return 0;
 		} finally {
-			console.timeEnd("getCodexLabeledPRsAccountWide");
+			// Timer removed for cleanup
 		}
 	},
 	(username) => ["getCodexLabeledPRsAccountWide", username],
@@ -1406,8 +1496,11 @@ export const getCodexLabeledPRsAccountWide = unstable_cache(
  */
 export const getClaudeLabeledPRsAccountWide = unstable_cache(
 	async (username) => {
-		console.log(`Fetching account-wide claude-labeled PRs for ${username}`);
-		console.time("getClaudeLabeledPRsAccountWide");
+		if (!username) {
+			const primaryUser = await getPrimaryUser();
+			username = primaryUser?.login;
+		}
+		if (!username) return 0;
 
 		try {
 			const query = buildClaudeLabeledAccountSearchQuery(username);
@@ -1439,7 +1532,7 @@ export const getClaudeLabeledPRsAccountWide = unstable_cache(
 			);
 			return 0;
 		} finally {
-			console.timeEnd("getClaudeLabeledPRsAccountWide");
+			// Timer removed for cleanup
 		}
 	},
 	(username) => ["getClaudeLabeledPRsAccountWide", username],
